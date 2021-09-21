@@ -19,7 +19,7 @@ public:
 private:
   Window *parent;
 
-  glwidget *widget;
+  glwidget *geometry_widget;
   QDockWidget *menu;
   QComboBox *func_box;
   QComboBox *method_box;

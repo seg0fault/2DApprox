@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <QObject>
+#include <QGLWidget>
 
 class surface;
 struct grid_info;
@@ -16,6 +17,7 @@ class glwidget: public QGLWidget
      DISC,
   };
 public:
+  glwidget (QWidget *parent);
     explicit glwidget(grid_info grid, QWidget *parent = 0);
     surface* get_buffer_surface ();
     surface* get_buffer_surface_disc ();

@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <memory>
 
+#include "grid.h"
+
 #define DEFAULT_NX 50
 #define DEFAULT_NY 50
 #define DEFAULT_FUNC 0
@@ -18,7 +20,6 @@ class QPushButton;
 class QRadioButton;
 class window_ui;
 
-struct grid_info;
 struct thread_info;
 
 class Window : public QWidget
@@ -28,7 +29,7 @@ public:
   static std::function <double (double, double)> func;
   std::function <double (double, double)> *norm_func;
 public:
-  Window (QWidget *parent) : QWidget (parent) {}
+  Window () = default;
   ~Window ();
 
   // Init
@@ -39,7 +40,7 @@ public:
 
 private:
   //Calculation data
-  std::unique_ptr<grid_info> m_grid;
+  grid_info m_grid;
 
   //Threads
   pthread_t *m_threads;

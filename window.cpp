@@ -13,6 +13,7 @@
 #include "thread_funcs.h"
 #include "msr_matrix.h"
 #include "glwidget.h"
+#include "window_ui.h"
 
 std::atomic <bool> is_busy (true);
 
@@ -49,7 +50,7 @@ int Window::init_data_for_calc ()
   memset (r, 0, matr_size * sizeof (double));
   memset (u, 0, matr_size * sizeof (double));
   memset (v, 0, matr_size * sizeof (double));
-  for (int i = 0; i < p; i++)
+  for (int i = 0; i < m_thread_count; i++)
     {
       m_infos[i].x = x;
       m_infos[i].r = r;
@@ -59,7 +60,7 @@ int Window::init_data_for_calc ()
       m_infos[i].matrix = matrix;
       m_infos[i].rhs = rhs;
       m_infos[i].structure = structure;
-      m_infos[i].grid = grid;
+      m_infos[i].grid = m_grid;
 
       m_infos[i].matr_len = matr_len;
       m_infos[i].matr_size = matr_size;
@@ -123,11 +124,11 @@ int Window::init_args (char *filename, int nx, int ny, int func_num, double eps,
       }
     }
 
-  m_grid.reset (new grid_info (nx, ny, {x1, y1}, {x2, y2}));
+  m_grid = grid_info (nx, ny, {x1, y1}, {x2, y2});
 
   setWindowTitle ("Kirill Yurievich please postav'te zachet");
 
-  this->m_thread_count = thread_count;
+  m_thread_count = thread_count;
   m_infos = new thread_info [thread_count];
   m_threads = nullptr;
   cond_out_ptr = new pthread_cond_t [1];
@@ -135,74 +136,33 @@ int Window::init_args (char *filename, int nx, int ny, int func_num, double eps,
   m_thread_out = new int [1];
   *m_thread_out = 0;
 
+  norm_func = new std::function <double (double, double)> ([this]  (double u, double v)
+  {
+    return func (u * m_grid.u.x() + v * m_grid.v.x (), u * m_grid.u.y () + v * m_grid.v.y ());
+  });
 
-}
-
-Window::Window (grid_info grid, int p, QWidget *parent)
-  : QWidget (parent), grid_for_calc (grid)
-{
-  widget = new glwidget (grid, this);
-  mult_button = new QPushButton ("*=2");
-  div_button = new QPushButton ("/=2");
-  func_button = new QRadioButton ("func");
-  disc_button = new QRadioButton ("disc");
-  QVBoxLayout *v_layout = new QVBoxLayout (this);
-  QHBoxLayout *h_layout = new QHBoxLayout (this);
-  v_layout->addLayout (h_layout);
-  h_layout->addWidget (mult_button);
-  h_layout->addWidget (div_button);
-  h_layout->addWidget (func_button);
-  h_layout->addWidget (disc_button);
-  v_layout->addWidget (widget);
-
-  connect(mult_button, SIGNAL (pressed ()), this, SLOT (mult_button_handler ()));
-  connect(div_button, SIGNAL (pressed ()), this, SLOT (div_button_handler ()));
-  connect(this, SIGNAL (calculation_completed ()), this, SLOT (change_data ()));
-
-  connect(func_button, SIGNAL (clicked ()), this, SLOT (select_func ()));
-  connect(disc_button, SIGNAL (clicked ()), this, SLOT (select_disc ()));
-
-  connect(this, SIGNAL (func_selected ()), widget, SLOT (change_cur_to_func ()));
-  connect(this, SIGNAL (disc_selected ()), widget, SLOT (change_cur_to_disc ()));
-
-  setWindowTitle ("2D approximation");
-
-  this->p = p;
-  infos = new thread_info [p];
-  threads = 0;
-  c_out_ptr = new pthread_cond_t [1];
-  c_out_ptr[0] = PTHREAD_COND_INITIALIZER;
-  p_out = new int [1];
-  *p_out = 0;
-
-  norm_func =
-      new std::function <double (double, double)> ([grid]  (double u, double v) {return func (u * grid.u.x() + v * grid.v.x (), u * grid.u.y () + v * grid.v.y ());});
-
-  for (int i = 0; i < p; i++)
+  for (int i = 0; i < m_thread_count; i++)
     {
-      infos[i].k = i;
-      infos[i].p = p;
-      infos[i].main_window = this;
-      infos[i].c_out = c_out_ptr;
-      infos[i].make_iteration = true;
-      infos[i].p_out = p_out;
-      infos[i].f = norm_func;
+      m_infos[i].k = i;
+      m_infos[i].p = m_thread_count;
+      m_infos[i].main_window = this;
+      m_infos[i].c_out = cond_out_ptr;
+      m_infos[i].make_iteration = true;
+      m_infos[i].p_out = m_thread_out;
+      m_infos[i].f = norm_func;
     }
 
-  mult_button->setEnabled (false);
-  div_button->setEnabled (false);
-
-  if (init_data_for_calc(grid, infos, widget->get_buffer_surface (), widget->get_buffer_surface_disc(), p) < 0)
+  if (init_data_for_calc () < 0)
     {
       printf ("Cannot build initial interpolation!\n");
       is_busy = false;
     }
   else
     {
-      threads = new pthread_t [p];
-      for (int i = 0; i < p; i++)
+      m_threads = new pthread_t [m_thread_count];
+      for (int i = 0; i < m_thread_count; i++)
         {
-          pthread_create (threads + i, 0, &thread_func, infos + i);
+          pthread_create (m_threads + i, 0, &thread_func, m_infos + i);
         }
     }
 }
@@ -282,12 +242,12 @@ void Window::closeEvent(QCloseEvent *event)
       event->ignore ();
   else
     {
-      for (int i = 0; i < p; i++)
+      for (int i = 0; i < m_thread_count; i++)
         {
-          infos[i].make_iteration = false;
+          m_infos[i].make_iteration = false;
         }
-      (*p_out)++;
-      pthread_cond_broadcast (c_out_ptr);
+      (*m_thread_out)++;
+      pthread_cond_broadcast (cond_out_ptr);
       event->accept ();
     }
 
@@ -297,10 +257,10 @@ Window::~Window ()
 {
   if (m_threads)
     {
-     for (int i = 0; i < thread_count; i++)
+     for (int i = 0; i < m_thread_count; i++)
        pthread_join (m_threads[i], 0);
 
-     delete[] threads;
+     delete[] m_threads;
     }
 
   delete[] m_infos;

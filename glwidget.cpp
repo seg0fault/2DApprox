@@ -2,7 +2,6 @@
 
 #include <QtOpenGL>
 #include <QWidget>
-#include <QGLWidget>
 #include <QPointF>
 #include <memory>
 

@@ -97,4 +97,8 @@ window_ui::window_ui (Window *parent_arg)
 
   multiWidget->setLayout (layout);
   menu->setWidget (multiWidget);
+
+  QVBoxLayout *graph_layout = new QVBoxLayout (parent);
+  geometry_widget = new glwidget (parent_arg);
+  graph_layout->addWidget (geometry_widget);
 }
